@@ -1,0 +1,12 @@
+# Foundry build artifacts
+/out/
+/cache/
+/broadcast/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets (none should ever live here)
+.env
+.env.*

@@ -1,0 +1,29 @@
+{
+  "lib/forge-std": {
+    "rev": "04ee608913e6c334973649b2b1a2976260647c1b"
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "3daafbfa9bfd4227844154fe9bacba3c9a80f497"
+  },
+  "lib/optimism": {
+    "rev": "88d42e506d61e13c1f5a5e1c0e1b4816d7093590"
+  },
+  "lib/permit2": {
+    "rev": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+  },
+  "lib/solady": {
+    "tag": {
+      "name": "v0.1.26",
+      "rev": "acd959aa4bd04720d640bf4e6a5c71037510cc4b"
+    }
+  },
+  "lib/universal-router": {
+    "rev": "fd75e3eca49d039fe2082bbd0c01aee93ed777a1"
+  },
+  "lib/v4-core": {
+    "rev": "d153b048868a60c2403a3ef5b2301bb247884d46"
+  },
+  "lib/v4-periphery": {
+    "rev": "3779387e5d296f39df543d23524b050f89a62917"
+  }
+}
