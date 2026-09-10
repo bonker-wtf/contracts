@@ -51,6 +51,7 @@ contract Deploy is Script {
         address universalRouter = vm.envAddress("UNIVERSAL_ROUTER");
         address teamFeeRecipient = vm.envAddress("TEAM_FEE_RECIPIENT");
         address positionManager = vm.envAddress("POSITION_MANAGER");
+        bool v4RouterHasMinHopPrice = vm.envBool("V4_ROUTER_HAS_MIN_HOP_PRICE");
         uint256 dynamicHookSalt = vm.envUint("DYNAMIC_HOOK_SALT");
         uint256 staticHookSalt = vm.envUint("STATIC_HOOK_SALT");
 
@@ -91,7 +92,8 @@ contract Deploy is Script {
             positionManager,
             permit2,
             universalRouter,
-            poolManager
+            poolManager,
+            v4RouterHasMinHopPrice
         );
         console.log("LpLocker:", address(lpLocker));
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
+import {console} from "forge-std/Script.sol";
+import {ChainPinnedScript} from "./ChainPinnedScript.sol";
 import {Bonker} from "../src/Bonker.sol";
 import {IBonker} from "../src/interfaces/IBonker.sol";
 import {IBonkerVault} from "../src/extensions/interfaces/IBonkerVault.sol";
@@ -16,7 +17,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 ///         Deploys two tokens:
 ///           1. "Vault Test" — 5% supply locked in vault (7-day lockup, no vesting)
 ///           2. "DevBuy Test" — creator buy of 0.001 ETH bundled into deploy
-contract TestExtensions is Script {
+contract TestExtensions is ChainPinnedScript {
     address constant FACTORY = 0xD850DACe6c3E3B3cf09ABb92342Fab681013c8cB;
     address constant DYNAMIC_HOOK = 0x963E91A45148b39737b9DF10c5b897B55cA9e8cC;
     address constant LP_LOCKER = 0xBf05b1d5E356f3219D0086A4e09c969ADbe2e7d0;
@@ -25,7 +26,7 @@ contract TestExtensions is Script {
     address constant VAULT = 0x26a4654E85CD8cc3Ba08dBC05418c63300624c8e;
     address constant DEVBUY = 0xc00Ab3631E82902f55B62EB95A0101eE2eb91a69;
 
-    function run() external {
+    function run() external onlyChain(BASE_CHAIN_ID) {
         uint256 deployerKey = vm.envUint("BONKER_PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
         console.log("Deployer:", deployer);

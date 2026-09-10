@@ -6,6 +6,7 @@ import {IBonkerFeeLocker} from "../interfaces/IBonkerFeeLocker.sol";
 
 import {IBonkerHook} from "../interfaces/IBonkerHook.sol";
 import {IBonkerLpLocker} from "../interfaces/IBonkerLpLocker.sol";
+import {V4RouterSwap} from "../utils/V4RouterSwap.sol";
 import {IBonkerLpLockerFeeConversion} from "./interfaces/IBonkerLpLockerFeeConversion.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -16,14 +17,12 @@ import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 
 import {IUniversalRouter} from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
-import {Commands} from "@uniswap/universal-router/contracts/libraries/Commands.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
-import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 
@@ -50,6 +49,13 @@ contract BonkerLpLockerFeeConversion is IBonkerLpLockerFeeConversion, Reentrancy
     IBonkerFeeLocker public immutable feeLocker;
     IUniversalRouter public immutable universalRouter;
     address public immutable factory;
+    /// @notice True when this chain's UniversalRouter is a fork whose `IV4Router` exact-input
+    ///         structs carry an extra `minHopPriceX36` member (Robinhood Chain, 4663).
+    /// @dev Set at deploy time from `config/chains.js`'s `v4RouterHasMinHopPrice`, the same way
+    ///      `BonkerUniv4EthDevBuy` takes it. Sending the stock layout to such a router reverts
+    ///      with EMPTY revert data before it makes a single inner call, so a wrong value here is
+    ///      invisible until a creator collects rewards — see `src/utils/V4RouterExactInput.sol`.
+    bool public immutable v4RouterHasMinHopPrice;
 
     // guard to stop recursive collection calls
     bool internal _inCollect;
@@ -64,7 +70,8 @@ contract BonkerLpLockerFeeConversion is IBonkerLpLockerFeeConversion, Reentrancy
         address positionManager_, // Address of the position manager
         address permit2_, // address of the permit2 contract
         address universalRouter_, // address of the universal router
-        address poolManager_ // address of the pool manager
+        address poolManager_, // address of the pool manager
+        bool v4RouterHasMinHopPrice_ // true on a chain whose router expects the forked struct
     ) Ownable(owner_) {
         factory = factory_;
         feeLocker = IBonkerFeeLocker(feeLocker_);
@@ -72,6 +79,7 @@ contract BonkerLpLockerFeeConversion is IBonkerLpLockerFeeConversion, Reentrancy
         permit2 = IPermit2(permit2_);
         universalRouter = IUniversalRouter(universalRouter_);
         poolManager = IPoolManager(poolManager_);
+        v4RouterHasMinHopPrice = v4RouterHasMinHopPrice_;
     }
 
     modifier onlyFactory() {
@@ -627,55 +635,38 @@ contract BonkerLpLockerFeeConversion is IBonkerLpLockerFeeConversion, Reentrancy
         return tokenOutAfter - tokenOutBefore;
     }
 
-    // perform a swap using the universal router which handles the unlocking of the pool
+    /// @notice Swaps `tokenIn` into `tokenOut` through the Universal Router, which unlocks the
+    ///         pool itself.
+    /// @dev The swap lives in `V4RouterSwap`, an EXTERNALLY LINKED library reached by
+    ///      `DELEGATECALL`, so the approvals and the balances are still this contract's. That
+    ///      indirection is not stylistic: inlining it costs more than the EIP-170 headroom this
+    ///      contract has, and the params blob has to switch layout per chain. See
+    ///      `src/utils/V4RouterSwap.sol` for the byte counts and for what linking obliges the
+    ///      deploy and verify scripts to do.
+    ///
+    ///      `amountOutMinimum` is 0 because this is a conversion of whatever fees the position
+    ///      happened to accrue, not a user trade with a quoted price to protect.
+    /// @param poolKey Pool to swap through.
+    /// @param tokenIn Token being spent.
+    /// @param tokenOut Token being received.
+    /// @param amountIn Exact input amount.
+    /// @return Amount of `tokenOut` this contract received.
     function _uniSwapLocked(
         PoolKey memory poolKey,
         address tokenIn,
         address tokenOut,
         uint128 amountIn
     ) internal returns (uint256) {
-        // initiate a swap command
-        bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
-
-        // Encode V4Router actions
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL)
-        );
-        bytes[] memory params = new bytes[](3);
-
-        // First parameter: SWAP_EXACT_IN_SINGLE
-        params[0] = abi.encode(
-            IV4Router.ExactInputSingleParams({
-                poolKey: poolKey,
-                zeroForOne: tokenIn < tokenOut, // swapping tokenIn -> tokenOut
-                amountIn: amountIn, // amount of tokenIn to swap
-                amountOutMinimum: 0, // minimum amount we expect to receive
-                hookData: bytes("") // no hook data needed, assuming we're using simple hooks
-            })
-        );
-
-        // Second parameter: SETTLE_ALL
-        params[1] = abi.encode(tokenIn, uint256(amountIn));
-
-        // Third parameter: TAKE_ALL
-        params[2] = abi.encode(tokenOut, 1);
-
-        // Combine actions and params into inputs
-        bytes[] memory inputs = new bytes[](1);
-        inputs[0] = abi.encode(actions, params);
-
-        // approvals
-        SafeERC20.forceApprove(IERC20(tokenIn), address(permit2), amountIn);
-        permit2.approve(tokenIn, address(universalRouter), amountIn, uint48(block.timestamp));
-
-        // Execute the swap
-        uint256 tokenOutBefore = IERC20(tokenOut).balanceOf(address(this));
-
-        universalRouter.execute(commands, inputs, block.timestamp);
-
-        uint256 tokenOutAfter = IERC20(tokenOut).balanceOf(address(this));
-
-        return tokenOutAfter - tokenOutBefore;
+        return V4RouterSwap.swapSingleHopExactIn({
+            universalRouter: universalRouter,
+            permit2: permit2,
+            poolKey: poolKey,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            amountIn: amountIn,
+            amountOutMinimum: 0,
+            hasMinHopPrice: v4RouterHasMinHopPrice
+        });
     }
 
     function _getPairedToken(address token, PoolKey memory poolKey)

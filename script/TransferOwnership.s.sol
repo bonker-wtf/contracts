@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
+import {console} from "forge-std/Script.sol";
+import {ChainPinnedScript} from "./ChainPinnedScript.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -33,7 +34,7 @@ interface IBonkerPresale {
     function transferOwnership(address newOwner) external;
 }
 
-contract TransferOwnership is Script {
+contract TransferOwnership is ChainPinnedScript {
     // Deployed contract addresses
     address constant FACTORY = 0xD850DACe6c3E3B3cf09ABb92342Fab681013c8cB;
     address constant FEE_LOCKER = 0x473e52D89bE6ea78f94d1b5c62Bd1f01b1E32e21;
@@ -43,13 +44,13 @@ contract TransferOwnership is Script {
     address constant LP_LOCKER = 0xBf05b1d5E356f3219D0086A4e09c969ADbe2e7d0;
     address constant MEV_MODULE = 0x6a04057180F8cc02E18DabEE3f3437E438BE657A;
     address constant AIRDROP = 0xa727da00eDd0F98Dc5Fb5D3b9eA09646CB809A87;
-    address constant PRESALE = 0x60729328cF4fd3E6996dee350308EcB238FCa5D7;
+    address constant PRESALE = 0xC3E89329777183Ebf4fBE02769c98799B9Ff93b4;
 
     address constant WETH = 0x4200000000000000000000000000000000000006;
 
     address constant NEW_OWNER = 0x6097DD26871b0c7811D52B674e7407a38F7E84e5;
 
-    function run() external {
+    function run() external onlyChain(BASE_CHAIN_ID) {
         uint256 deployerKey = vm.envUint("BONKER_PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
 
