@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
+import {console} from "forge-std/Script.sol";
+import {ChainPinnedScript} from "./ChainPinnedScript.sol";
 import {IBonker} from "../src/interfaces/IBonker.sol";
 import {IBonkerAirdropV2} from "../src/extensions/interfaces/IBonkerAirdropV2.sol";
 import {BonkerPresaleEthToCreator} from "../src/extensions/BonkerPresaleEthToCreator.sol";
@@ -10,16 +11,16 @@ import {IBonkerLpLockerFeeConversion} from
 
 /// @notice Start a TBONK test presale on mainnet.
 ///         Airdrop (10%) + Presale (20%), min 0.001 ETH, max 0.01 ETH, 1 week.
-contract StartPresale is Script {
+contract StartPresale is ChainPinnedScript {
     address constant FACTORY = 0xD850DACe6c3E3B3cf09ABb92342Fab681013c8cB;
     address constant DYNAMIC_HOOK = 0x963E91A45148b39737b9DF10c5b897B55cA9e8cC;
     address constant LP_LOCKER = 0xBf05b1d5E356f3219D0086A4e09c969ADbe2e7d0;
     address constant MEV_MODULE = 0x6a04057180F8cc02E18DabEE3f3437E438BE657A;
     address constant WETH = 0x4200000000000000000000000000000000000006;
     address constant AIRDROP = 0xa727da00eDd0F98Dc5Fb5D3b9eA09646CB809A87;
-    address constant PRESALE = 0x60729328cF4fd3E6996dee350308EcB238FCa5D7;
+    address constant PRESALE = 0xC3E89329777183Ebf4fBE02769c98799B9Ff93b4;
 
-    function run() external {
+    function run() external onlyChain(BASE_CHAIN_ID) {
         uint256 deployerKey = vm.envUint("BONKER_PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
         console.log("Deployer:", deployer);

@@ -5,35 +5,39 @@ import {Script, console} from "forge-std/Script.sol";
 
 import {Bonker} from "../src/Bonker.sol";
 import {BonkerVault} from "../src/extensions/BonkerVault.sol";
-import {BonkerUniv4EthDevBuy} from "../src/extensions/BonkerUniv4EthDevBuy.sol";
 
-/// @notice Deploy Vault and DevBuy extensions, then enable them on Factory.
+/// @notice Deploy the Vault extension and enable it on the factory.
+///
+/// The dev-buy extension used to be deployed here too and now has its own `DeployDevBuy`
+/// script, because it is the one piece that gets replaced on its own — see that script's
+/// header for why.
+///
+/// Every address is read from the environment. It used to hardcode Base's factory, WETH and
+/// UniversalRouter, which meant pointing this script at another chain's `--rpc-url` deployed
+/// extensions wired to contracts that do not exist there — a DevBuy holding Base's router
+/// address deploys fine, enables fine, and reverts only when a creator's first dev-buy runs.
+/// `vm.envAddress` reverts on an unset variable, so a missing value fails before broadcast.
 contract DeployExtensions is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("BONKER_PRIVATE_KEY");
 
-        address factoryAddr = 0xD850DACe6c3E3B3cf09ABb92342Fab681013c8cB;
-        address weth = 0x4200000000000000000000000000000000000006;
-        address universalRouter = 0x6fF5693b99212Da76ad316178A184AB56D299b43;
-        address permit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+        address factoryAddr = vm.envAddress("FACTORY");
 
         Bonker factory = Bonker(factoryAddr);
+
+        console.log("Chain:", block.chainid);
+        console.log("Factory:", factoryAddr);
 
         vm.startBroadcast(deployerKey);
 
         BonkerVault vault = new BonkerVault(factoryAddr);
         console.log("Vault:", address(vault));
 
-        BonkerUniv4EthDevBuy devBuy = new BonkerUniv4EthDevBuy(factoryAddr, weth, universalRouter, permit2);
-        console.log("DevBuy:", address(devBuy));
-
         factory.setExtension(address(vault), true);
-        factory.setExtension(address(devBuy), true);
 
         vm.stopBroadcast();
 
         console.log("\n=== Extensions Deployed ===");
         console.log("Vault:  ", address(vault));
-        console.log("DevBuy: ", address(devBuy));
     }
 }

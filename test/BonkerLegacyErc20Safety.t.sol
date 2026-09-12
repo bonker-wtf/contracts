@@ -15,8 +15,9 @@ import {IBonkerUniv4EthDevBuy} from "../src/extensions/interfaces/IBonkerUniv4Et
 import {IBonker} from "../src/interfaces/IBonker.sol";
 import {BonkerLpLockerFeeConversion} from "../src/lp-lockers/BonkerLpLockerFeeConversion.sol";
 import {BonkerLpLockerMultiple} from "../src/lp-lockers/BonkerLpLockerMultiple.sol";
-import {IBonkerLpLockerFeeConversion} from
-    "../src/lp-lockers/interfaces/IBonkerLpLockerFeeConversion.sol";
+import {
+    IBonkerLpLockerFeeConversion
+} from "../src/lp-lockers/interfaces/IBonkerLpLockerFeeConversion.sol";
 
 contract MockTokenNoReturn {
     mapping(address => uint256) public balanceOf;
@@ -137,9 +138,8 @@ contract BonkerAirdropLegacyErc20SafetyTest is Test {
             )
         });
 
-        IBonker.DeploymentConfig memory deploymentConfig = _deploymentConfig(
-            extensionConfigs, address(0), address(0), ""
-        );
+        IBonker.DeploymentConfig memory deploymentConfig =
+            _deploymentConfig(extensionConfigs, address(0), address(0), "");
 
         token.mint(FACTORY, ALLOCATION);
 
@@ -209,7 +209,7 @@ contract BonkerDevBuyLegacyErc20SafetyTest is Test {
         universalRouter.setMint(address(token), TOKEN_AMOUNT);
 
         BonkerUniv3EthDevBuy extension = new BonkerUniv3EthDevBuy(
-            FACTORY, address(weth), address(universalRouter), address(permit2), address(0)
+            FACTORY, address(weth), address(universalRouter), address(permit2), address(0), false
         );
 
         IBonker.ExtensionConfig[] memory extensionConfigs = new IBonker.ExtensionConfig[](1);
@@ -219,9 +219,7 @@ contract BonkerDevBuyLegacyErc20SafetyTest is Test {
             extensionBps: 0,
             extensionData: abi.encode(
                 IBonkerUniv3EthDevBuy.Univ3EthDevBuyExtensionData({
-                    uniV3Fee: 0,
-                    pairedTokenAmountOutMinimum: 0,
-                    recipient: RECIPIENT
+                    uniV3Fee: 0, pairedTokenAmountOutMinimum: 0, recipient: RECIPIENT
                 })
             )
         });
@@ -232,11 +230,7 @@ contract BonkerDevBuyLegacyErc20SafetyTest is Test {
         vm.deal(FACTORY, ETH_AMOUNT);
         vm.prank(FACTORY);
         extension.receiveTokens{value: ETH_AMOUNT}(
-            deploymentConfig,
-            poolKeyFor(address(weth), address(token)),
-            address(token),
-            0,
-            0
+            deploymentConfig, poolKeyFor(address(weth), address(token)), address(token), 0, 0
         );
 
         assertEq(token.balanceOf(RECIPIENT), TOKEN_AMOUNT);
@@ -252,8 +246,9 @@ contract BonkerDevBuyLegacyErc20SafetyTest is Test {
         MockUniversalRouter universalRouter = new MockUniversalRouter();
         universalRouter.setMint(address(token), TOKEN_AMOUNT);
 
-        BonkerUniv4EthDevBuy extension =
-            new BonkerUniv4EthDevBuy(FACTORY, address(weth), address(universalRouter), address(permit2));
+        BonkerUniv4EthDevBuy extension = new BonkerUniv4EthDevBuy(
+            FACTORY, address(weth), address(universalRouter), address(permit2), false
+        );
 
         IBonker.ExtensionConfig[] memory extensionConfigs = new IBonker.ExtensionConfig[](1);
         extensionConfigs[0] = IBonker.ExtensionConfig({
@@ -275,11 +270,7 @@ contract BonkerDevBuyLegacyErc20SafetyTest is Test {
         vm.deal(FACTORY, ETH_AMOUNT);
         vm.prank(FACTORY);
         extension.receiveTokens{value: ETH_AMOUNT}(
-            deploymentConfig,
-            poolKeyFor(address(weth), address(token)),
-            address(token),
-            0,
-            0
+            deploymentConfig, poolKeyFor(address(weth), address(token)), address(token), 0, 0
         );
 
         assertEq(token.balanceOf(RECIPIENT), TOKEN_AMOUNT);
@@ -331,7 +322,7 @@ contract BonkerLockerLegacyErc20SafetyTest is Test {
     address internal constant ADMIN = address(0xA11CE);
     address internal constant RECIPIENT = address(0xB0B);
     address internal constant PAIRED_TOKEN = address(0xFFFF);
-    uint256 internal constant POOL_SUPPLY = 1_000 ether;
+    uint256 internal constant POOL_SUPPLY = 1000 ether;
 
     function testMultipleLockerStillPullsNonStandardToken() public {
         MockTokenNoReturn token = new MockTokenNoReturn();
@@ -374,14 +365,16 @@ contract BonkerLockerLegacyErc20SafetyTest is Test {
             address(positionManager),
             address(permit2),
             address(0),
-            address(0)
+            address(0),
+            false
         );
 
         IBonkerLpLockerFeeConversion.FeeIn[] memory feePreference =
             new IBonkerLpLockerFeeConversion.FeeIn[](1);
         feePreference[0] = IBonkerLpLockerFeeConversion.FeeIn.Both;
-        bytes memory lockerData =
-            abi.encode(IBonkerLpLockerFeeConversion.LpFeeConversionInfo({feePreference: feePreference}));
+        bytes memory lockerData = abi.encode(
+            IBonkerLpLockerFeeConversion.LpFeeConversionInfo({feePreference: feePreference})
+        );
 
         token.mint(FACTORY, POOL_SUPPLY);
 

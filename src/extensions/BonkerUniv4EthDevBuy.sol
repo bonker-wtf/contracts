@@ -6,6 +6,8 @@ import {IBonkerExtension} from "../interfaces/IBonkerExtension.sol";
 
 import {IBonkerUniv4EthDevBuy} from "./interfaces/IBonkerUniv4EthDevBuy.sol";
 
+import {V4RouterExactInput} from "../utils/V4RouterExactInput.sol";
+
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -19,7 +21,6 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {IWETH9} from "@uniswap/v4-periphery/src/interfaces/external/IWETH9.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 
@@ -32,6 +33,13 @@ contract BonkerUniv4EthDevBuy is ReentrancyGuard, IBonkerUniv4EthDevBuy {
     IWETH9 public immutable weth;
     IUniversalRouter public immutable universalRouter;
     IPermit2 public immutable permit2;
+    /// @notice True when this chain's UniversalRouter is a fork whose `IV4Router` exact-input
+    ///         structs carry an extra `minHopPriceX36` member (Robinhood Chain, 4663).
+    /// @dev Set at deploy time from `config/chains.js`'s `v4RouterHasMinHopPrice`. Sending the
+    ///      stock layout to such a router reverts with EMPTY revert data before it makes a
+    ///      single inner call, so this cannot be discovered from a failing swap's trace — see
+    ///      `V4RouterExactInput` for the layouts side by side and the measurements.
+    bool public immutable v4RouterHasMinHopPrice;
 
     modifier onlyFactory() {
         if (msg.sender != address(factory)) revert Unauthorized();
@@ -42,11 +50,20 @@ contract BonkerUniv4EthDevBuy is ReentrancyGuard, IBonkerUniv4EthDevBuy {
     /// @param weth_ Wrapped native token used as the intermediate buy asset.
     /// @param universalRouter_ Uniswap universal router used for V4 swaps.
     /// @param permit2_ Permit2 contract approved for transient token spends.
-    constructor(address factory_, address weth_, address universalRouter_, address permit2_) {
+    /// @param v4RouterHasMinHopPrice_ True on a chain whose UniversalRouter is the fork that
+    ///        expects `minHopPriceX36` in its exact-input params.
+    constructor(
+        address factory_,
+        address weth_,
+        address universalRouter_,
+        address permit2_,
+        bool v4RouterHasMinHopPrice_
+    ) {
         factory = IBonker(factory_);
         weth = IWETH9(weth_);
         universalRouter = IUniversalRouter(universalRouter_);
         permit2 = IPermit2(permit2_);
+        v4RouterHasMinHopPrice = v4RouterHasMinHopPrice_;
     }
 
     /// @notice Consumes launch ETH to buy the freshly deployed token for the configured recipient.
@@ -202,16 +219,15 @@ contract BonkerUniv4EthDevBuy is ReentrancyGuard, IBonkerUniv4EthDevBuy {
         // token ordering
         bool tokenInIsToken0 = Currency.unwrap(poolKey.currency0) == tokenIn;
 
-        // First parameter: SWAP_EXACT_IN_SINGLE
-        params[0] = abi.encode(
-            IV4Router.ExactInputSingleParams({
-                poolKey: poolKey,
-                zeroForOne: tokenInIsToken0 ? true : false, // swapping tokenIn -> tokenOut
-                amountIn: amountIn, // amount of tokenIn to swap
-                amountOutMinimum: amountOutMinimum, // minimum amount we expect to receive
-                hookData: bytes("") // no hook data needed, assuming we're using simple hooks
-            })
-        );
+        // First parameter: SWAP_EXACT_IN_SINGLE, in the layout THIS chain's router decodes.
+        params[0] = V4RouterExactInput.encodeExactInputSingle({
+            poolKey: poolKey,
+            zeroForOne: tokenInIsToken0, // swapping tokenIn -> tokenOut
+            amountIn: amountIn, // amount of tokenIn to swap
+            amountOutMinimum: amountOutMinimum, // minimum amount we expect to receive
+            // no hook data needed, assuming we're using simple hooks
+            hasMinHopPrice: v4RouterHasMinHopPrice
+        });
 
         // Second parameter: SETTLE_ALL
         params[1] = abi.encode(tokenIn, uint256(amountIn));
